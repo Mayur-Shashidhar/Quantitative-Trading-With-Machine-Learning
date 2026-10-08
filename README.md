@@ -482,9 +482,3 @@ This project is an academic machine learning and quantitative-finance experiment
 Historical backtest results do not guarantee future performance.
 
 ---
-
-## Author
-
-**S Mayur**  
-BTech Computer Science and Engineering  
-PES University
