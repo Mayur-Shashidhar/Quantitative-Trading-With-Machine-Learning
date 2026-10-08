@@ -259,20 +259,6 @@ pip install yfinance xgboost lightgbm scikit-learn pandas numpy matplotlib
 
 The notebook automatically downloads and aligns data, builds features and targets, performs rolling evaluation, compares models, generates out-of-sample predictions, calculates regression metrics, and evaluates trading strategies against Buy and Hold.
 
-## Project Structure
-
-```text
-quantitative-trading-ml/
-│
-├── Quantitative_Trading_With_Machine_Learning.ipynb
-├── README.md
-├── report.pdf
-│
-└── results/
-    ├── predictions/
-    └── figures/
-```
-
 ## Disclaimer
 
 This project is an academic machine learning and quantitative-finance experiment. It is **not financial advice** and does not constitute a recommendation to buy, sell, or short VWAGY or any other security.
