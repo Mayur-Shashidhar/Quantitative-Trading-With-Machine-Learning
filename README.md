@@ -11,6 +11,7 @@ This repository contains the original notebook/report and a modular Python imple
 - `quant_trading/strategy.py` — validation threshold selection, signals, transaction costs, and Buy & Hold returns.
 - `quant_trading/pipeline.py` — end-to-end orchestration.
 - `quant_trading/cli.py` — command-line entry point.
+- `Quantitative_Trading_ML_Modular_Colab.ipynb` — Colab-ready presentation notebook with tables, plots, and interpretation.
 - `Quantitative_Trading_With_Machine_Learning.ipynb` — original executable narrative, retained for comparison.
 
 ## Run
