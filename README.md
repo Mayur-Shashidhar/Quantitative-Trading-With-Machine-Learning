@@ -1,115 +1,302 @@
 # Quantitative Trading With Machine Learning
 
-A machine learning based quantitative trading research project for predicting short-term **Volkswagen AG (VWAGY)** returns using historical market data and publicly available supply-chain and industry proxy information.
-
 ## Project Overview
 
-This project investigates whether machine learning can predict short-term future returns of Volkswagen AG's American Depositary Receipt (VWAGY) using historical market information and information from related supply-chain and industry companies.
+This project investigates whether machine learning can predict short-term future returns of Volkswagen AG's American Depositary Receipt (**VWAGY**) using historical VWAGY market information together with publicly available supply-chain and industry proxy companies.
 
-The project is inspired by the Stanford CS229 **Quantitative Trading With Machine Learning** case study involving Volkswagen. This implementation is a **scaled-down public-data adaptation**, not an exact reproduction of the original research.
+The implementation is **paper-inspired rather than an exact reproduction** of the reference study. It uses a smaller public-data proxy universe and does not include the broader macroeconomic information used in the original methodology.
+
+The project evaluates both:
+
+1. **Return prediction** using multiple machine learning regression models.
+2. **Trading performance** by converting predictions into Long, Short, and Neutral positions and comparing them with VWAGY Buy-and-Hold.
+
+---
 
 ## Problem Statement
 
-The objective is to determine whether historical VWAGY information and information from related companies can be used to predict future VWAGY returns. The problem is formulated as regression:
+Can historical VWAGY market behaviour and lagged returns from related supply-chain and industry companies provide useful information for predicting future VWAGY returns?
+
+For a forecast horizon \(h\), the target is defined as:
 
 ```text
-Target_h(t) = Price(t+h) / Price(t) - 1
+Target_h(t) = Close(t+h) / Close(t) - 1
 ```
 
-Forecast horizons: **1, 5, 10, 15, 20, and 25 trading days**.
+The project evaluates horizons of:
+
+- 1 trading day
+- 5 trading days
+- 10 trading days
+- 15 trading days
+- 20 trading days
+- 25 trading days
+
+The goal is to evaluate out-of-sample predictive ability rather than assume that machine learning will produce a profitable strategy.
+
+---
 
 ## Dataset
 
-**Target:** `VWAGY`
+### Target Asset
 
-The final cleaned dataset contains **2,681 observations and 276 input features**, covering **2015-03-31 to 2025-11-24**.
+**VWAGY — Volkswagen AG ADR**
+
+Daily market data is downloaded from Yahoo Finance using `yfinance`.
+
+Configured data period:
+
+```text
+2015-01-01 → 2026-01-01
+```
+
+The final usable period depends on feature construction, missing values, and forward-target availability.
 
 ### Supply-Chain / Industry Proxies
 
-| Company | Ticker |
-|---|---|
-| Continental | `CON.DE` |
-| Infineon | `IFX.DE` |
-| HELLA | `HLE.DE` |
-| BASF | `BAS.DE` |
-| BorgWarner | `BWA` |
-| Magna | `MGA` |
-| Lear | `LEA` |
-| Aptiv | `APTV` |
-| TSMC | `TSM` |
+The project uses nine publicly traded companies as practical proxies:
 
-These are practical publicly available supply-chain or industry proxies, not a verified complete Volkswagen supplier network. TSMC is an indirect semiconductor proxy.
+| Ticker | Company / Role |
+|---|---|
+| `CON.DE` | Continental |
+| `IFX.DE` | Infineon |
+| `HLE.DE` | HELLA |
+| `BAS.DE` | BASF |
+| `BWA` | BorgWarner |
+| `MGA` | Magna |
+| `LEA` | Lear |
+| `APTV` | Aptiv |
+| `TSM` | TSMC — indirect semiconductor proxy |
+
+These are **public supply-chain/industry proxies**, not a claim that they constitute the complete verified Volkswagen supplier network.
+
+---
 
 ## Feature Engineering
 
-The final feature set contains **276 features**:
+The final experiment contains **276 input features**.
 
-- **24 VWAGY technical features**
-- **252 supply-chain features**
-- 9 proxy companies × 28 lagged daily returns = 252 supply-chain features
+### VWAGY Technical Features
 
-The technical features include returns, volatility, absolute returns, momentum, moving-average relationships, and volume-related measures.
+24 VWAGY technical features are constructed from multiple lookback windows:
+
+- Returns
+- Rolling volatility
+- Absolute returns
+- Momentum
+
+Lookback windows:
+
+```text
+3, 5, 10, 20, 30, 60 trading days
+```
+
+### Supply-Chain Features
+
+For every proxy company, daily returns are calculated and lagged over the previous 28 trading days.
+
+```text
+9 proxies × 28 lags = 252 supply-chain features
+```
+
+Therefore:
+
+```text
+24 VWAGY features
++ 252 supply-chain features
+--------------------------------
+= 276 total features
+```
+
+### Forward Targets
+
+The model predicts signed future returns for:
+
+```text
+1D, 5D, 10D, 15D, 20D, 25D
+```
+
+Only historical/current information is used as model input; future prices are used only to construct the target labels.
+
+---
+
+## Data Preparation
+
+The notebook:
+
+1. Downloads VWAGY market data.
+2. Downloads the nine proxy datasets.
+3. Aligns proxy data to the VWAGY trading calendar.
+4. Forward-fills only short proxy gaps using a maximum five-day limit.
+5. Constructs VWAGY technical features.
+6. Constructs 28 lagged return features for each proxy.
+7. Creates forward-return targets.
+8. Removes rows that remain incomplete after feature and target construction.
+9. Sorts the resulting dataset chronologically.
+
+Short forward-filling is used to handle differences between exchange trading calendars. It is deliberately limited to avoid carrying stale observations indefinitely.
+
+---
 
 ## Machine Learning Models
 
 Four regression models are compared:
 
-1. **Elastic Net** — L1/L2 regularized regression suitable for correlated lag features.
-2. **Decision Tree** — captures nonlinear relationships.
-3. **XGBoost** — gradient-boosted decision trees.
-4. **LightGBM** — efficient gradient-boosting framework.
+### Elastic Net
 
-## Rolling Time-Series Evaluation
+Regularized linear regression combining L1 and L2 penalties. It is useful for a large set of correlated lag features.
 
-The final experiment uses a paper-style chronological rolling evaluation rather than a random split.
+Configuration used in the notebook:
+
+```text
+alpha = 0.001
+l1_ratio = 0.5
+max_iter = 10000
+random_state = 42
+```
+
+### Decision Tree
+
+A nonlinear tree-based regression model capable of capturing feature interactions.
+
+### XGBoost
+
+Gradient-boosted decision trees designed to capture nonlinear relationships and interactions.
+
+### LightGBM
+
+An efficient gradient-boosting framework suitable for large feature sets.
+
+---
+
+## Evaluation Methodology
+
+### Paper-Style Rolling Evaluation
+
+The final notebook uses a chronological rolling methodology rather than a random train-test split.
 
 Each rolling window contains:
 
 ```text
-Training   → 5 years
-Validation → 1 year
-Testing    → 1 month
+5 years  → Training
+1 year   → Validation
+1 month  → Unseen Test
 ```
 
-The window moves forward monthly and the training period expands as more historical data becomes available.
+The window moves forward by one month.
 
-For each window:
+The training period is **expanding**, meaning that historical observations remain available as the evaluation progresses.
 
-1. All four models are evaluated at all six horizons.
-2. Validation RMSE selects the best model-horizon combination.
-3. The selected configuration is retrained using available training and validation data.
-4. The following month is evaluated as unseen test data.
-5. Test predictions are stored as out-of-sample predictions.
+### Model Selection
 
-## Data Leakage Prevention
+For every rolling window:
 
-The experiment uses:
+1. All four models are evaluated.
+2. All six forecast horizons are evaluated.
+3. Validation RMSE is calculated.
+4. The model-horizon combination with the lowest validation RMSE is selected.
+5. The selected model is retrained using training + validation data.
+6. The following month is predicted as completely unseen out-of-sample data.
 
-- Chronological rather than random splitting
-- Historical features only
-- Future prices only for target construction
-- Validation-only model and horizon selection
-- Training-only scaling for Elastic Net
-- Unseen out-of-sample test periods
+The test period is not used for model or horizon selection.
+
+---
+
+## Leakage Prevention
+
+The experiment is designed to avoid time-series leakage.
+
+Key protections include:
+
+- Chronological rather than random evaluation.
+- Features use only current and historical information.
+- Future prices are used only to construct labels.
+- Model and horizon selection use validation data.
+- The unseen test month is evaluated only after the model choice is fixed.
+- Elastic Net scaling is performed inside a pipeline so the scaler is fitted with the model's training data.
+
+The core principle is:
+
+> **The test data must remain unseen until final evaluation.**
+
+---
+
+## Out-of-Sample Experiment
+
+The current notebook run generated:
+
+```text
+Rolling windows: 55
+OOS observations: 1,150
+```
+
+All 55 rolling windows selected the **1-day forecast horizon**.
+
+The selected model varied across market periods:
+
+| Model | Windows selected |
+|---|---:|
+| Elastic Net | 27 |
+| XGBoost | 18 |
+| Decision Tree | 8 |
+| LightGBM | 2 |
+
+This variation demonstrates that model performance changes across market regimes.
+
+Several individual windows produced positive test R², including windows 5, 11, 16, 17, 18, 47, 48, and 51. However, positive performance in individual windows does not establish stable predictive power across the complete out-of-sample period.
+
+The notebook calculates the aggregate OOS RMSE, MAE, R², and correlation directly from the 1,150 OOS predictions.
+
+---
 
 ## Evaluation Metrics
 
-- **RMSE:** Root Mean Squared Error
-- **MAE:** Mean Absolute Error
-- **R²:** Performance relative to a mean-target baseline
-- **Correlation:** Linear relationship between predicted and actual returns
+### Regression Metrics
 
-Interpretation of R²:
+**RMSE**
 
-```text
-R² > 0  → Better than the mean baseline
-R² ≈ 0  → Little improvement over the mean baseline
-R² < 0  → Worse than the mean baseline
-```
+Measures the magnitude of prediction error while penalizing larger errors more heavily.
+
+**MAE**
+
+Measures the average absolute prediction error.
+
+**R²**
+
+Measures performance relative to predicting the mean target value.
+
+A negative R² is valid. It means that the model performed worse than the mean-return baseline for the evaluated period.
+
+**Correlation**
+
+Measures the linear relationship between predicted and actual returns.
+
+### Portfolio Metrics
+
+The trading experiment reports:
+
+- Total Return
+- Annualized Return
+- Annualized Volatility
+- Sharpe Ratio
+- Maximum Drawdown
+- Win Rate
+
+Annualization uses 252 trading periods.
+
+---
 
 ## Trading Strategy
 
-Predicted returns are converted into simple signals using thresholds of:
+Model predictions are converted into positions using a prediction threshold.
+
+```text
+Prediction > +threshold  → LONG  (+1)
+Prediction < -threshold  → SHORT (-1)
+Otherwise                → NEUTRAL (0)
+```
+
+The notebook evaluates:
 
 ```text
 0.00%
@@ -118,155 +305,186 @@ Predicted returns are converted into simple signals using thresholds of:
 1.00%
 ```
 
-```text
-Prediction > +threshold → LONG
-Prediction < -threshold → SHORT
-Otherwise               → NEUTRAL
-```
+The strategy is compared with a simple VWAGY Buy-and-Hold benchmark.
 
-The resulting strategies are compared with VWAGY Buy and Hold.
+The notebook also reports the distribution of Long, Short, and Neutral signals for every threshold.
 
-# Results
+### Important Backtesting Note
 
-## Aggregate Out-of-Sample Results
+This is an academic research backtest, not a live trading system. It does not fully model:
 
-| Metric | Result |
-|---|---:|
-| RMSE | **0.022532** |
-| MAE | **0.016674** |
-| R² | **-0.084046** |
-| Correlation | **-0.052283** |
+- Slippage
+- Bid-ask spreads
+- Market impact
+- Liquidity constraints
+- Borrowing costs
+- Real order execution
 
-The aggregate out-of-sample R² is negative, meaning the complete set of rolling predictions did not outperform the simple mean-return baseline.
+Therefore, the trading results should not be interpreted as guaranteed real-world performance.
 
-## Individual Rolling Windows
+---
 
-Several individual windows produced positive R² values, including:
+## Visualizations
 
-```text
-Window 11 → +0.0483
-Window 14 → +0.0568
-Window 17 → +0.0750
-Window 18 → +0.0719
-Window 25 → +0.0697
-Window 37 → +0.0213
-Window 47 → +0.0443
-Window 48 → +0.0632
-```
+The notebook produces several visual outputs, including:
 
-This indicates that useful predictive relationships appeared during some market regimes, but they were not stable across the complete evaluation period.
+1. **VWAGY historical closing-price graph**
+2. **Actual vs predicted out-of-sample returns**
+3. **Rolling-window R²**
+4. **Out-of-sample trading equity curves**
+5. **Trading signal distribution**
 
-## Why Is Aggregate R² Negative?
+The equity-curve graph uses explicit datetime handling so the x-axis represents the actual OOS trading dates.
 
-Several factors can explain the result:
+---
 
-1. **Financial returns are noisy.** Short-term returns contain substantial unpredictable variation.
-2. **Market regimes change.** Relationships between VWAGY and related companies can change over time.
-3. **Predictions are concentrated near zero.** The model struggles to capture large positive and negative return movements.
-4. **Limited supply-chain information.** Only nine public proxies are used rather than a complete supplier network.
-5. **Missing macroeconomic information.** The implementation does not include the broader macroeconomic variables used in the reference methodology.
-6. **No single model dominates.** Different models are selected in different rolling windows.
+## Results Interpretation
 
-## Buy-and-Hold Benchmark
+The project should be interpreted as a quantitative research experiment rather than a claim of profitable forecasting.
 
-| Metric | Result |
-|---|---:|
-| Total Return | **-57.81%** |
-| Sharpe Ratio | **-0.4931** |
-| Maximum Drawdown | **-69.80%** |
+If the aggregate OOS R² is negative, the correct interpretation is:
 
-## Key Finding
+> The tested feature/model configuration did not outperform the mean-return baseline across the complete unseen evaluation period.
 
-> The tested technical and supply-chain proxy features produced occasional predictive signal in individual market regimes, but the signal was not stable enough to outperform the mean-return baseline across the complete out-of-sample evaluation period.
+This does not mean machine learning cannot predict financial returns in general. It means that the particular information set, proxy universe, models, horizons, and historical period tested here did not produce a stable aggregate predictive signal.
 
-This is a valid quantitative research result. The project evaluates the hypothesis using leakage-aware out-of-sample methodology rather than assuming that machine learning must produce a profitable strategy.
+Individual positive-R² windows can occur because market relationships vary across regimes. Such windows should not be selectively reported as evidence of overall success.
+
+---
+
+## Reference Methodology vs This Project
+
+This implementation is **paper-inspired**, not an exact replication.
+
+| Component | Reference-oriented idea | This project |
+|---|---|---|
+| Target | Volkswagen | VWAGY |
+| Market data | Historical market data | Yahoo Finance |
+| Supply-chain information | Broad supplier network | 9 public proxies |
+| Proxy lags | Historical return lags | 28 return lags |
+| Macro variables | Used in reference methodology | Not included |
+| Models | Elastic Net, Tree, XGBoost, LightGBM | Same four |
+| Forecast horizons | Multiple horizons | 1, 5, 10, 15, 20, 25 days |
+| Evaluation | Rolling time-series style | 5Y train / 1Y validation / 1M test |
+| Training | Time-aware | Expanding monthly rolling evaluation |
+
+The main limitation is that the original study's broader supplier and macroeconomic information is not fully available in this public-data implementation.
+
+---
+
+## Why the Negative Result Is Valuable
+
+A negative result is still informative.
+
+The experiment demonstrates:
+
+- How to construct a financial prediction dataset.
+- How supply-chain proxy information can be incorporated.
+- How to create forward-return targets.
+- How to compare multiple regression models.
+- How to avoid random time-series leakage.
+- How to perform rolling out-of-sample evaluation.
+- How to convert predictions into trading signals.
+- How to compare a model strategy with Buy-and-Hold.
+
+Most importantly, the project demonstrates why strong-looking predictions or individual successful periods are not enough. A signal must remain useful across genuinely unseen market periods.
+
+---
 
 ## Limitations
 
-### Data
+1. The proxy universe is smaller than the complete supplier universe used by the reference study.
+2. The proxy companies are practical public proxies, not a verified exact supplier list.
+3. Macro-economic variables from the reference methodology are not included.
+4. Yahoo Finance data and ticker availability can change over time.
+5. Financial relationships can change across market regimes.
+6. Hyperparameters are constrained rather than exhaustively optimized.
+7. The trading backtest uses simplified execution assumptions.
+8. A negative aggregate R² indicates limited predictive power for this tested configuration.
 
-- Publicly available market data only
-- Smaller supply-chain proxy universe than the original research
-- Proxy companies are not claimed to be an exact supplier list
-- Different market calendars
-- Yahoo Finance data and ticker availability can change
+---
 
-### Modeling
+## Future Work
 
-- Four model families
-- Limited hyperparameter tuning
-- No statistical significance testing
-- Financial returns are highly noisy
-- Relationships can change across market regimes
+Possible extensions include:
 
-### Trading
+- Expanding the supply-chain company universe.
+- Adding macroeconomic variables.
+- Adding market indices and sector-level variables.
+- Systematic hyperparameter optimization.
+- Nested or stronger walk-forward validation.
+- Statistical significance testing.
+- Feature-importance stability analysis.
+- Testing additional market regimes and assets.
+- More realistic transaction-cost and execution modelling.
+- Robustness testing across different feature sets and thresholds.
 
-The backtest does not fully model slippage, bid-ask spreads, liquidity constraints, borrowing costs, short-sale restrictions, market impact, or capital-allocation constraints. It should therefore not be interpreted as a live trading system.
-
-## Reference Methodology vs This Implementation
-
-This project is inspired by the Volkswagen quantitative-trading case study but is not an exact reproduction.
-
-| Component | Reference Study | This Project |
-|---|---|---|
-| Target | Volkswagen | VWAGY |
-| Data period | Earlier historical period | 2015–2025 |
-| Supply-chain universe | Much broader | 9 public proxies |
-| Supply-chain lags | 28-day history | 28-day history |
-| Macro variables | Included | Not included |
-| Models | Elastic Net, Tree, XGBoost, LightGBM | Same four |
-| Horizons | Multiple horizons | 1, 5, 10, 15, 20, 25 days |
-| Evaluation | Rolling time-series | Rolling time-series |
-| Data source | Historical market/research data | Yahoo Finance |
-
-The project should therefore be described as a **paper-inspired, scaled-down public-data implementation**.
-
-## Future Improvements
-
-- Expand the supply-chain company universe
-- Add macroeconomic variables
-- Add market indices and broader financial indicators
-- Systematically tune model hyperparameters
-- Test additional ML models
-- Perform statistical significance testing
-- Test multiple target assets
-- Improve execution-cost modelling
-- Analyze feature-importance stability
-- Test robustness across additional market regimes
+---
 
 ## Technologies Used
 
 - Python
-- Pandas
+- Google Colab / Jupyter Notebook
 - NumPy
+- Pandas
+- Matplotlib
 - Scikit-learn
 - XGBoost
 - LightGBM
-- Matplotlib
 - yfinance
-- Google Colab
-- Jupyter Notebook
 
-## Running the Project
+---
 
-Open the notebook in Google Colab and run the cells sequentially.
+## How to Run
 
-Install dependencies if required:
+### 1. Open the notebook
+
+Open the `.ipynb` file in Google Colab or Jupyter Notebook.
+
+### 2. Install required packages if necessary
 
 ```bash
-pip install yfinance xgboost lightgbm scikit-learn pandas numpy matplotlib
+pip install yfinance xgboost lightgbm
 ```
 
-The notebook automatically downloads and aligns data, builds features and targets, performs rolling evaluation, compares models, generates out-of-sample predictions, calculates regression metrics, and evaluates trading strategies against Buy and Hold.
+### 3. Run the notebook sequentially
 
-## Disclaimer
+The notebook is organized into stages:
 
-This project is an academic machine learning and quantitative-finance experiment. It is **not financial advice** and does not constitute a recommendation to buy, sell, or short VWAGY or any other security.
+```text
+1. Imports & configuration
+2. Data collection
+3. Feature engineering
+4. Rolling-window generation
+5. Model selection & OOS prediction
+6. Aggregate OOS evaluation
+7. Trading strategy & Buy-and-Hold
+```
 
-The negative aggregate out-of-sample R² is reported honestly and should not be artificially optimized. The purpose is to evaluate the predictive hypothesis using rigorous time-series methodology.
+Because the data is downloaded from Yahoo Finance, results can change slightly between runs due to data revisions, ticker availability, date alignment, and library behaviour.
+
+---
+
+## Project Structure
+
+```text
+.
+├── Quantitative_Trading_With_Machine_Learning(2).ipynb
+└── README.md
+```
+
+---
+
+## Academic Disclaimer
+
+This project is an academic machine learning and quantitative-finance experiment. It is not financial advice and does not constitute a recommendation to buy, sell, or short VWAGY or any other security.
+
+Historical backtest results do not guarantee future performance.
+
+---
 
 ## Author
 
 **S Mayur**  
-B.Tech Computer Science and Engineering  
-PES University, Bengaluru
+BTech Computer Science and Engineering  
+PES University
