@@ -1,256 +1,234 @@
 # Quantitative Trading with Machine Learning
 
+> An educational machine-learning experiment for forecasting Volkswagen stock returns and evaluating rule-based trading strategies against a buy-and-hold benchmark.
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Objectives](#objectives)
+- [Dataset](#dataset)
+- [Methodology](#methodology)
+- [Models](#models)
+- [Trading Strategy](#trading-strategy)
+- [Evaluation Metrics](#evaluation-metrics)
+- [Notebook Structure](#notebook-structure)
+- [Requirements](#requirements)
+- [How to Run](#how-to-run)
+- [Limitations](#limitations)
+- [Future Improvements](#future-improvements)
+- [Disclaimer](#disclaimer)
+
 ## Overview
 
-This project explores whether historical Volkswagen Frankfurt stock
-returns and related supplier-return features can be used to predict
-Volkswagen's future return and construct a rule-based trading strategy.
+This project investigates whether historical Volkswagen Frankfurt returns and related supplier-return features can help predict Volkswagen's future returns. Predictions from regression models are converted into trading positions and compared with a buy-and-hold benchmark.
 
-The notebook is organized into eight code cells with Markdown
-explanations. It compares three regression models and evaluates their
-predictions and trading strategies against a buy-and-hold benchmark.
+The implementation is organized as an eight-cell Jupyter notebook, with Markdown explanations accompanying each code section.
 
-> **Important:** This notebook is an experimental backtest, not a live
-> trading system or evidence of a reliably profitable strategy. Its
-> evaluation design has limitations described below.
+**This is an experimental backtest, not a live trading system or proof of a reliably profitable strategy.**
 
 ## Objectives
 
--   Predict Volkswagen's forward return over a 20-trading-row horizon.
--   Compare Elastic Net, Ridge regression, and Extra Trees regression.
--   Convert predicted returns into long, short, or neutral positions.
--   Include a configurable transaction-cost assumption.
--   Compare strategy returns and risk metrics with buy-and-hold over the
-    same sampled evaluation periods.
--   Present results through tables and charts.
+- Predict Volkswagen's forward return over a 20-row trading horizon.
+- Compare Elastic Net, Ridge Regression, and Extra Trees Regression.
+- Convert predicted returns into long-only or long-short positions.
+- Account for a configurable transaction-cost assumption.
+- Compare strategy performance with buy-and-hold over the same sampled evaluation periods.
+- Summarize results using tables and visualizations.
 
 ## Dataset
 
-The notebook expects the following file to exist in the runtime:
+The notebook expects the CSV file at:
 
-``` text
+```text
 /content/databaseFrankfurtComplete.csv
 ```
 
-The CSV must contain at least these columns:
+### Required columns
 
--   `Date` --- observation date.
--   `Close` --- Volkswagen Frankfurt closing price.
+| Column | Description |
+|---|---|
+| `Date` | Observation date |
+| `Close` | Volkswagen Frankfurt closing price |
 
-The dataset also uses columns matching these naming patterns when
-available:
+### Feature columns
 
--   `Return_Delta1_*` --- daily-return features for supplier/proxy
-    companies.
--   `Return_Delta1_VW` through `Return_Delta28_VW` --- Volkswagen
-    return-lag features.
+When available, the notebook uses:
 
-The notebook parses dates, converts the closing price to numeric values,
-removes rows missing the date or closing price, sorts chronologically,
-and removes duplicate dates.
+- `Return_Delta1_*` columns for daily returns of supplier or proxy companies.
+- `Return_Delta1_VW` through `Return_Delta28_VW` for Volkswagen return-lag features.
+- Engineered momentum and rolling-volatility features.
 
-**Data provenance and field definitions should be documented by the
-project owner.** This README does not independently verify the source,
-licensing, survivorship characteristics, or exact meaning of every
-column in the CSV.
+The notebook parses dates, converts closing prices to numeric values, removes rows without valid dates or prices, sorts chronologically, and removes duplicate dates.
+
+> **Data provenance:** The source, licensing, and exact definitions of every dataset field should be documented separately. Column names alone do not verify data provenance or prove that every feature was available at the time of a hypothetical trade.
 
 ## Methodology
 
 ### 1. Target construction
 
-The target is calculated from the closing-price series:
+The target is the forward return over the next 20 rows:
 
-\[ y_t = `\frac{Close_{t+20}}{Close_t}`{=tex} - 1 \]
+\[
+y_t = \frac{Close_{t+20}}{Close_t} - 1
+\]
 
-It represents the return from the current close to the close 20 rows
-later. Since the data is ordered by date, these rows are intended to
-represent 20 trading observations. The final 20 rows do not have an
-observable target and are excluded from the labeled dataset.
+The dataset is sorted chronologically before the target is created. The final 20 rows do not have a complete forward target and are excluded from supervised learning.
 
 ### 2. Feature engineering
 
-The feature matrix includes available supplier daily-return columns and
-Volkswagen return lags from 1 through 28 days. It also calculates the
-following price-derived features:
+The feature set includes available supplier-return features, Volkswagen return lags from 1 to 28 rows, and price-derived features:
 
--   Momentum over 5, 10, 20, and 60 rows.
--   Rolling daily-return volatility over 5, 10, 20, and 60 rows.
+- Momentum over 5, 10, 20, and 60 rows.
+- Rolling return volatility over 5, 10, 20, and 60 rows.
 
-Non-numeric values are coerced to missing values, and infinite values
-are replaced with missing values. Columns that are entirely missing or
-constant are removed. Median imputation is performed inside each model
-pipeline.
+Non-numeric values are converted to missing values, and infinite values are treated as missing. Entirely missing or constant columns are removed. Median imputation is included in the model pipelines.
 
 ### 3. Chronological split
 
-The notebook uses a chronological 60/40 split:
+The notebook uses a chronological **60/40 split**:
 
--   First 60% of eligible observations: model fitting and threshold
-    selection.
--   Remaining 40%: evaluation.
+| Segment | Share | Purpose |
+|---|---:|---|
+| Fit period | First 60% | Fit models and choose a trading rule |
+| Evaluation period | Remaining 40% | Evaluate the selected rules |
 
-It attempts to purge observations near the split because the
-forward-return labels can cross the boundary. The current implementation
-calculates this purge using 20 **calendar days**, rather than 20 trading
-rows. This is a known methodological limitation.
+Trading performance is calculated over sampled, non-overlapping 20-row periods.
 
-Trading metrics are calculated using sampled non-overlapping 20-row
-periods. The code selects these periods using the row index modulo the
-horizon.
+**Known limitation:** The current purge logic uses 20 calendar days around the split rather than purging by 20 trading-row positions. Calendar days and trading observations are not equivalent.
 
-### 4. Models
+### 4. Model training
 
-The notebook compares three regressors:
+The notebook trains three regression models:
 
-  ------------------------------------------------------------------------
-  Model                   Configuration in the     Purpose
-                          notebook                 
-  ----------------------- ------------------------ -----------------------
-  Elastic Net             `alpha=0.01`,            Linear regression with
-                          `l1_ratio=0.2`           combined L1/L2
-                                                   regularization
+| Model | Configuration | Rationale |
+|---|---|---|
+| Elastic Net | `alpha=0.01`, `l1_ratio=0.2` | Combines L1 and L2 regularization |
+| Ridge Regression | `alpha=10.0` | Regularizes a linear regression model |
+| Extra Trees Regression | 250 trees, `min_samples_leaf=15`, `max_features=0.7` | Captures nonlinear patterns through an ensemble of randomized trees |
 
-  Ridge                   `alpha=10.0`             Linear regression with
-                                                   L2 regularization
+Training targets are clipped at the 1st and 99th percentiles to reduce the influence of extreme values. Median imputation is used for all models; Elastic Net and Ridge also use feature standardization.
 
-  Extra Trees             250 trees,               Tree ensemble that can
-                          `min_samples_leaf=15`,   represent nonlinear
-                          `max_features=0.7`       relationships
-  ------------------------------------------------------------------------
-
-Before fitting, the training target is clipped at its 1st and 99th
-percentiles. The models use median imputation; Elastic Net and Ridge
-also use standardization.
-
-### 5. Trading rules
+### 5. Trading-rule selection
 
 The notebook evaluates two position modes:
 
--   **Long-only:** take a long position when the prediction exceeds the
-    threshold; otherwise remain neutral.
--   **Long-short:** take a long position when the prediction exceeds the
-    threshold, a short position when it is below the negative threshold,
-    and otherwise remain neutral.
+- **Long-only:** enter a long position when the prediction exceeds the selected threshold; otherwise hold cash.
+- **Long-short:** enter long when the prediction exceeds the threshold, short when it is below the negative threshold, and otherwise remain neutral.
 
-For each model, candidate thresholds are based on quantiles of the
-absolute fitted-period predictions. The notebook selects the threshold
-and position mode with the highest approximate annualized Sharpe ratio
-on the same periods used to fit the model.
+Candidate thresholds are based on quantiles of the absolute predictions from the fit period. The current implementation chooses the threshold and position mode with the highest approximate annualized Sharpe ratio on those same fit-period observations.
 
-A transaction cost of `0.001` (0.1%) is charged per unit of position
-turnover. A move from long to short changes the position by two units
-and therefore incurs twice the position turnover of a move from neutral
-to long.
+**Important:** Because the models were fitted on these observations, these predictions are in-sample. Selecting a trading rule using in-sample predictions can overstate performance.
 
-### 6. Evaluation metrics
+### 6. Transaction costs
 
-The notebook reports:
+The configured transaction cost is:
 
-**Prediction metrics** - Mean Absolute Error (MAE). - MAE improvement
-relative to a zero-return prediction baseline. - Directional accuracy.
+```python
+TRANSACTION_COST = 0.001  # 0.1% per unit of position turnover
+```
 
-**Trading metrics** - Compounded strategy return. - Compounded
-buy-and-hold return. - Approximate annualized Sharpe ratio. - Maximum
-drawdown. - Percentage of periods with a non-neutral position.
+Costs are applied when positions change. For example, changing from long (`+1`) to short (`-1`) represents two units of turnover, while changing from neutral (`0`) to long (`+1`) represents one.
 
-The strategy and buy-and-hold returns are calculated over the same
-sampled evaluation periods. These returns are not directly comparable
-with another study unless the sample dates, asset, horizon, portfolio
-rules, transaction costs, and evaluation procedure are aligned.
+This simplified cost model does not fully represent real execution costs.
 
-## Notebook structure
+## Models
 
-  Cell   Responsibility
-  ------ --------------------------------------------------------------
-  1      Imports, configuration, dataset loading, and basic cleaning
-  2      Forward target and feature engineering
-  3      Chronological 60/40 split and sampled trading periods
-  4      Fit Elastic Net, Ridge, and Extra Trees
-  5      Select each model's threshold and position mode
-  6      Calculate prediction and trading metrics
-  7      Display a focused model-comparison table
-  8      Generate charts for returns, Sharpe ratio, drawdown, and MAE
+### Elastic Net
+
+Linear regression with both L1 and L2 regularization. It can shrink less useful coefficients and help stabilize estimates when features are correlated.
+
+### Ridge Regression
+
+Linear regression with L2 regularization. It penalizes large coefficients and can be useful when many correlated return features are present.
+
+### Extra Trees Regression
+
+An ensemble of randomized decision trees. It can model nonlinear relationships, but may also overfit noisy financial data.
+
+## Evaluation Metrics
+
+### Prediction metrics
+
+| Metric | Interpretation |
+|---|---|
+| Mean Absolute Error (MAE) | Average absolute difference between predicted and actual returns |
+| Zero-baseline MAE | MAE when the predicted return is always zero |
+| MAE improvement (%) | Relative MAE improvement compared with the zero-return baseline |
+| Directional accuracy (%) | Share of predictions with the correct return direction |
+
+Positive MAE improvement indicates that the model's MAE is lower than the zero-return baseline. Negative improvement indicates worse MAE than the baseline.
+
+### Trading metrics
+
+| Metric | Interpretation |
+|---|---|
+| Strategy return | Compounded return from the model-driven positions |
+| Buy-and-hold return | Compounded return from holding the asset over the sampled periods |
+| Sharpe ratio | Approximate risk-adjusted performance |
+| Maximum drawdown | Largest peak-to-trough decline in the equity curve |
+| Invested percentage | Share of sampled periods with a non-neutral position |
+
+Results should be interpreted jointly. A higher return alone does not establish a better strategy, and a positive historical result does not establish future profitability.
+
+## Notebook Structure
+
+| Cell | Purpose |
+|---|---|
+| 1 | Imports, configuration, dataset loading, and cleaning |
+| 2 | Forward-target construction and feature engineering |
+| 3 | Chronological 60/40 split and sampled trading periods |
+| 4 | Fit Elastic Net, Ridge, and Extra Trees |
+| 5 | Select trading thresholds and position modes |
+| 6 | Calculate prediction and portfolio metrics |
+| 7 | Display the model-comparison table |
+| 8 | Plot returns, Sharpe ratios, drawdowns, and prediction errors |
 
 ## Requirements
 
-The notebook uses Python and the following libraries:
+- Python 3.10 or later recommended
+- NumPy
+- pandas
+- Matplotlib
+- scikit-learn
+- Jupyter Notebook or Google Colab
 
--   `numpy`
--   `pandas`
--   `matplotlib`
--   `scikit-learn`
+Install the required packages:
 
-Install them in a local environment if required:
-
-``` bash
+```bash
 pip install numpy pandas matplotlib scikit-learn
 ```
 
-The notebook was written for a notebook environment such as Google
-Colab, but the code can be adapted to Jupyter by changing `DATA_PATH` to
-the local CSV path.
+## How to Run
 
-## How to run
+1. Ensure `databaseFrankfurtComplete.csv` is available at `/content/databaseFrankfurtComplete.csv`.
+2. If using a local Jupyter environment, change `DATA_PATH` in Cell 1 to the correct local path.
+3. Open the notebook.
+4. Run Cells 1–8 in order.
+5. Review the printed metrics table and generated charts.
 
-1.  Place `databaseFrankfurtComplete.csv` at
-    `/content/databaseFrankfurtComplete.csv`, or update `DATA_PATH` in
-    Cell 1.
-2.  Open the notebook.
-3.  Run the eight code cells in order, following their Markdown
-    descriptions.
-4.  Review the model comparison table and four charts.
-5.  The notebook displays results but does not automatically save a ZIP
-    archive.
+The notebook does not require a Google upload prompt and does not create ZIP archives. It may export a CSV results table, depending on the final cell configuration.
 
-## Important limitations
+## Limitations
 
-The current notebook is a preliminary experiment and should be
-interpreted cautiously.
+1. **In-sample threshold selection:** The model is evaluated on fit-period predictions when choosing its trading threshold and position mode. This introduces selection bias.
+2. **Calendar-day purge:** The current purge uses calendar days instead of trading-row positions, so it may not fully prevent forward-target overlap.
+3. **Feature timing:** Supplier and proxy features must be checked to ensure they were available before the simulated trade. Their names alone cannot establish that.
+4. **Simplified execution assumptions:** The backtest does not fully model slippage, bid-ask spreads, market impact, liquidity, borrow fees, or short-sale restrictions.
+5. **Single evaluation segment:** A single chronological evaluation period cannot establish robustness across different market regimes.
+6. **Model-selection risk:** Comparing multiple models and thresholds can produce a configuration that fits historical noise.
+7. **Reference-paper differences:** This notebook uses a 20-row target, three models, and a 60/40 split. It should not be described as an exact reproduction of a paper that uses different models, data, horizons, or rolling evaluation windows.
 
-1.  **Threshold-selection bias:** thresholds and position modes are
-    selected using predictions on the same observations used to fit each
-    model. These are in-sample predictions, so the selected
-    configuration may be overly optimistic.
-2.  **Purge implementation:** the split purge uses calendar days rather
-    than removing the last 20 trading-row labels. It should be corrected
-    for a more rigorous time-series evaluation.
-3.  **Feature availability:** the dataset's supplier-return columns must
-    be audited to confirm that each feature was actually available at
-    the time a trade would be placed. Naming conventions alone do not
-    prove that a feature is free of look-ahead leakage.
-4.  **Simplified execution model:** the backtest assumes a fixed
-    turnover cost and does not fully model bid-ask spreads, slippage,
-    liquidity, market impact, borrow fees, short-sale constraints, or
-    execution timing.
-5.  **Single evaluation segment:** one chronological split cannot
-    establish stability across market regimes. Walk-forward testing
-    across multiple periods would be stronger.
-6.  **No guarantee of profitability:** positive historical returns do
-    not guarantee future performance. A higher strategy return also does
-    not necessarily mean better prediction accuracy.
-7.  **Reference-paper comparability:** this implementation uses a 20-row
-    target, three models, and a 60/40 split. It is not an exact
-    reproduction of a paper that uses different models, data, horizons,
-    or rolling evaluation windows.
+## Future Improvements
 
-## Recommended future improvements
+- Introduce a separate chronological validation segment for model and trading-rule selection.
+- Keep the final test period untouched until all decisions are fixed.
+- Purge observations using trading-row positions to match the forward-label horizon.
+- Audit feature timestamps and target alignment.
+- Add RMSE and \(R^2\) alongside MAE.
+- Compare against zero-return, buy-and-hold, and simple momentum baselines.
+- Test performance under different transaction costs and market periods.
+- Add automated checks for target alignment, split boundaries, turnover costs, and benchmark consistency.
 
--   Replace the single split with rolling or walk-forward evaluation.
--   Use a separate validation segment for model and trading-rule
-    selection, then evaluate the final test period only once.
--   Purge training observations by row position to match the
-    forward-label horizon.
--   Audit all feature timestamps and definitions for leakage.
--   Add RMSE and (R\^2), and compare against both zero-return and simple
-    momentum baselines.
--   Test sensitivity to transaction costs and thresholds.
--   Report the exact evaluation dates and all strategy assumptions.
--   Add tests for target alignment, chronological splits, turnover
-    costs, and benchmark consistency.
+## Disclaimer
 
-## Responsible interpretation
-
-This project is intended for educational and research purposes. It
-demonstrates a basic machine-learning and backtesting workflow. It
-should not be treated as investment advice or a production-ready
-automated trading system.
+This project is intended for educational and research purposes only. It is not investment advice, and the backtest should not be used as the basis for live trading without substantial additional validation.
