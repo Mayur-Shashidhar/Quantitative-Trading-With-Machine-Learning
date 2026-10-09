@@ -62,6 +62,78 @@ The notebook parses dates, converts closing prices to numeric values, removes ro
 
 > **Data provenance:** The source, licensing, and exact definitions of every dataset field should be documented separately. Column names alone do not verify data provenance or prove that every feature was available at the time of a hypothetical trade.
 
+## Dataset Source and Data Preparation
+
+### 1. Original Dataset Source
+
+This project is based on the research paper **[Quantitative Trading with Machine Learning](https://cs229.stanford.edu/proj2021spr/report2/81953230.pdf)**, published as a Stanford CS229 machine learning course project.
+
+The original authors made their replication files publicly available through the following GitHub repository:
+
+- **GitHub repository:** https://github.com/rglawion/cs229_project_report
+- **Research paper:** https://cs229.stanford.edu/proj2021spr/report2/81953230.pdf
+- **Research poster:** https://cs229.stanford.edu/proj2021spr/poster/81953230.pdf
+
+The original study investigates whether machine learning models can predict future stock returns using historical returns from Volkswagen (VW) and its supply-chain companies. The dataset contains historical financial observations and precomputed return-related features.
+
+### 2. Dataset Selection
+
+The available CSV files included datasets for Frankfurt-listed companies and a broader dataset. For this implementation, we used **`databaseFrankfurtComplete.csv`**, which contains the historical Volkswagen Frankfurt observations alongside a large collection of financial features.
+
+The dataset contains approximately **3,809 rows and 1,292 columns**, covering the period from January 2005 to December 2019. The target stock is identified by the ticker `VOW.F`.
+
+Important columns include:
+
+| Column or feature group | Purpose |
+|---|---|
+| `Date` | Identifies the observation date |
+| `Ticker` | Identifies the stock |
+| `Close` | Historical closing price of Volkswagen |
+| `Return_Delta1_VW` to `Return_Delta28_VW` | Historical Volkswagen return features |
+| Supplier return features | Capture historical return information from related companies |
+| `Return_Future_Delta*` features | Precomputed forward-return features supplied with the dataset |
+
+### 3. Conversion and Preprocessing
+
+The original CSV was prepared for use in the Python machine learning pipeline. Rather than downloading a new dataset or collecting stock prices independently, we used the supplied replication data and selected the Frankfurt dataset appropriate for the experiment.
+
+The preparation process involved the following steps:
+
+1. **Load the CSV:** Read `databaseFrankfurtComplete.csv` into a pandas DataFrame.
+2. **Inspect the schema:** Examine the dimensions, column names, data types, date coverage, ticker values and missing values.
+3. **Select the target stock:** Use the Volkswagen Frankfurt observations identified by `VOW.F`.
+4. **Sort chronologically:** Order observations by date to preserve the time-series structure and prevent random shuffling.
+5. **Select model features:** Use historical return columns and other permitted numerical features available at prediction time.
+6. **Prepare the prediction target:** Use the closing-price series to construct the forward return for the selected prediction horizon.
+7. **Engineer additional features:** Calculate rolling momentum and volatility features over 5-, 10-, 20- and 60-observation windows.
+8. **Prepare model inputs:** Handle missing feature values using median imputation and apply feature scaling for models that require it.
+9. **Split the observations:** Use a chronological 60:40 split for fitting and evaluation, rather than a random train-test split.
+
+The target return is defined as:
+
+\[
+y_t = \frac{P_{t+h}}{P_t}-1
+\]
+
+where \(P_t\) is the closing price at time \(t\), \(P_{t+h}\) is the closing price after \(h\) trading observations, and \(h\) is the selected prediction horizon.
+
+For example, a 20-observation horizon estimates the percentage price change between the current closing price and the closing price 20 trading observations later.
+
+### 4. Final Dataset Used by the Models
+
+After preparation, the data is represented as a chronological feature matrix \(X\) and a target vector \(y\). These are passed to the machine learning models for return prediction.
+
+The implementation evaluates Elastic Net, Ridge Regression and Extra Trees Regression. Their predictions are subsequently used to construct long-only and long-short trading signals and compare the resulting strategies against a buy-and-hold benchmark.
+
+**Reproducibility note:** The supplied dataset already contains engineered return columns. The project uses these existing features where appropriate and constructs additional features for the selected pipeline. The forward-return target is derived from the closing-price series; precomputed forward-return columns are not automatically assumed to follow the same target convention.
+
+### 5. Reference
+
+Glawion, R. M., *Quantitative Trading with Machine Learning*. Stanford CS229 course project, Spring 2021.
+
+- Paper: https://cs229.stanford.edu/proj2021spr/report2/81953230.pdf
+- Replication repository: https://github.com/rglawion/cs229_project_report
+
 ## Methodology
 
 ### 1. Target construction
